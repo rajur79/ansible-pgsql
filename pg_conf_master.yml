@@ -1,0 +1,63 @@
+---
+- name: Check if database is already initialized
+  stat:
+    path: '/var/lib/pgsql/13/data/PG_VERSION'
+  register: init_status
+- name: Initialize the master database
+  shell: "/usr/pgsql-13/bin/postgresql-13-setup initdb"
+  when: init_status.stat.exists == False
+  become_user: root
+- name: Promote slave database to master
+  shell: "/usr/pgsql-13/bin/pg_ctl promote -D /var/lib/pgsql/13/data"
+  when: init_status.stat.exists == True and standby_status.stat.exists == True
+- name: Start database
+  systemd:
+    state: started
+    name: postgresql-13
+  become_user: root
+- name: Create replication user, set MD5-hashed password, grant privs
+  postgresql_user:
+    name: replusr
+    password: "{{ 'md5' + ((repl_passwd + repl_user) | hash('md5')) }}"
+    role_attr_flags: REPLICATION
+    priv: ALL
+    db: postgres
+- name: Configure DBs to listen on ip address
+  lineinfile:
+    path: /var/lib/pgsql/13/data/postgresql.conf
+    line: listen_addresses = 'localhost,{{ ansible_all_ipv4_addresses[0] }}'
+- name: Configure wal_level parameter
+  lineinfile:
+    path: /var/lib/pgsql/13/data/postgresql.conf
+    line: wal_level = 'replica'
+- name: Configure wal_log_hints parameter
+  lineinfile:
+    path: /var/lib/pgsql/13/data/postgresql.conf
+    line: wal_log_hints = 'on'
+- name: Configure max_wal_senders parameter
+  lineinfile:
+    path: /var/lib/pgsql/13/data/postgresql.conf
+    line: max_wal_senders = '8'
+- name: Configure wal_keep_segments parameter
+  lineinfile:
+    path: /var/lib/pgsql/13/data/postgresql.conf
+  lineinfile:
+    path: /var/lib/pgsql/13/data/postgresql.conf
+    line: wal_keep_size = '16'
+- name: Configure hot_standby parameter
+  lineinfile:
+    path: /var/lib/pgsql/13/data/postgresql.conf
+    line: hot_standby = 'on'
+- name: Enable replication user to login
+  blockinfile:
+    path: /var/lib/pgsql/13/data/pg_hba.conf
+    block: |
+      {% for host in groups['db_hosts'] %}
+      host    replication     replusr     {{  hostvars[host]['ansible_facts']['eth0']['ipv4']['address'] }}/32    md5
+      {% endfor %}
+- name: Restart database
+  systemd:
+    state: restarted
+    name: postgresql-13
+  become_user: root
+  when: standby_status.stat.exists == False

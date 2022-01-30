@@ -1,0 +1,66 @@
+---
+- hosts: db_hosts
+  vars:
+    repl_user: replusr
+    repl_passwd: "{{ lookup('env', 'PG_REPL_PASSWD') }}"
+    db_user: airflow_user
+    db_password: "{{ lookup('env', 'DB_PASSWD') }}"
+    db_name: airflow_db
+  remote_user: ansible
+  become: True
+  tasks:
+  - name: Check if database is standing by
+    stat:
+      path: '/var/lib/pgsql/13/data/standby.signal'
+    register: standby_status
+  - name: Execute prerequisites on all hosts
+    import_tasks: pg_prerequisites.yml
+    when: inventory_hostname in groups['db_hosts']
+  - name: Configure master node
+    import_tasks: pg_conf_master.yml
+    vars:
+      standby_status: "{{ standby_status }}"
+    when: inventory_hostname in groups['db_master']
+    become_user: postgres
+  - name: Configure slave nodes
+    import_tasks: pg_conf_slave.yml
+    when: inventory_hostname in groups['db_slaves']
+    become_user: postgres
+    vars:
+      master_host: "{{ groups.db_master[0] }}"
+
+  handlers:
+  - name: Restart Linux server
+    reboot:
+  - name: Restart database
+    systemd:
+      state: restarted
+      name: postgresql-13
+
+  tasks:
+  - name: Create first database
+    postgresql_db:
+      state: present
+    postgresql_db:
+      state: present
+      name: "{{ db_name }}"
+    become: yes
+    become_user: postgres
+
+  - name: Create db user
+    postgresql_user:
+      state: present
+      name: "{{ db_user }}"
+      password: "{{ db_password }}"
+    become: yes
+    become_user: postgres
+
+  - name: "Grant db user access to app db"
+    postgresql_privs:
+      type: database
+      database: "{{ db_name }}"
+      roles: "{{ db_user }}"
+      grant_option: no
+      privs: all
+    become: yes
+    become_user: postgres

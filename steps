@@ -1,0 +1,7 @@
+https://www.epilis.gr/en/blog/2019/10/08/postgresql-ha-setup-using-ansible/
+export PG_REPL_PASSWD='Pa55w0rd!'
+export DB_PASSWD='Pa55w0rd!'
+ansible-playbook pg_setup.yml
+
+
+https://download.postgresql.org/pub/repos/yum/13/redhat/rhel-7-x86_64/postgresql13-libs-13.5-1PGDG.rhel7.x86_64.rpm

@@ -1,0 +1,14 @@
+---
+- name: Install PostgreSQL 13 packages
+  yum:
+    name:
+    - /root/ansible-pgsql/postgresql13-libs-13.5-1PGDG.rhel7.x86_64.rpm
+    - /root/ansible-pgsql/postgresql13-13.5-1PGDG.rhel7.x86_64.rpm
+    - /root/ansible-pgsql/postgresql13-server-13.5-1PGDG.rhel7.x86_64.rpm
+    - /root/ansible-pgsql/postgresql13-contrib-13.5-1PGDG.rhel7.x86_64.rpm
+    - python-psycopg2
+    state: present
+- name: Enable database service on boot
+  systemd:
+    name: postgresql-13
+    enabled: yes
